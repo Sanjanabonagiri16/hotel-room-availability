@@ -288,7 +288,7 @@ const Index = () => {
       />
       {/* Settings Dialog */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
-        <DialogContent className="rounded-2xl shadow-2xl p-8 max-w-md w-full bg-white max-h-[90vh] overflow-y-auto">
+        <DialogContent className="rounded-2xl shadow-2xl p-8 max-w-md w-full bg-card max-h-[90vh] overflow-y-auto text-foreground">
           <DialogHeader>
             <DialogTitle>Settings</DialogTitle>
             <DialogClose asChild>
@@ -318,7 +318,7 @@ const Index = () => {
             <div>
               <label className="block text-sm font-semibold mb-2">Default Calendar View</label>
               <select
-                className="w-full border rounded-lg px-3 py-2 bg-gray-100 text-base font-medium"
+                className="w-full border border-border rounded-lg px-3 py-2 bg-background text-base font-medium text-foreground"
                 value={defaultView}
                 onChange={e => setDefaultView(e.target.value)}
               >

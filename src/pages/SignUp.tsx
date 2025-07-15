@@ -32,7 +32,7 @@ export default function SignUp() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 to-indigo-200">
-      <Card className="w-full max-w-md p-8 shadow-xl rounded-xl bg-white/80 backdrop-blur">
+      <Card className="w-full max-w-md p-8 shadow-xl rounded-xl bg-card/80 backdrop-blur text-foreground">
         <h2 className="text-2xl font-bold mb-6 text-center">Sign Up</h2>
         <form onSubmit={handleSignUp} className="space-y-4">
           <div>
@@ -54,7 +54,7 @@ export default function SignUp() {
         </form>
         <div className="mt-4 text-center text-sm">
           Already have an account?{' '}
-          <Link to="/signin" className="text-blue-600 hover:underline">Sign In</Link>
+          <Link to="/signin" className="text-primary hover:underline">Sign In</Link>
         </div>
       </Card>
     </div>

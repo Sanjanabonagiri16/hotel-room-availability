@@ -27,7 +27,7 @@ export default function SignIn() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-100 to-indigo-200">
-      <Card className="w-full max-w-md p-8 shadow-xl rounded-xl bg-white/80 backdrop-blur">
+      <Card className="w-full max-w-md p-8 shadow-xl rounded-xl bg-card/80 backdrop-blur text-foreground">
         <h2 className="text-2xl font-bold mb-6 text-center">Sign In</h2>
         <form onSubmit={handleSignIn} className="space-y-4">
           <div>
@@ -45,7 +45,7 @@ export default function SignIn() {
         </form>
         <div className="mt-4 text-center text-sm">
           Don&apos;t have an account?{' '}
-          <Link to="/signup" className="text-blue-600 hover:underline">Sign Up</Link>
+          <Link to="/signup" className="text-primary hover:underline">Sign Up</Link>
         </div>
       </Card>
     </div>
