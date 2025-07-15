@@ -93,6 +93,26 @@ export function useHotelData() {
     return data;
   };
 
+  // Transform API response to our internal format
+  const transformApiDataToAvailability = (apiData: any[], fromDate: Date, toDate: Date): AvailabilityData[] => {
+    const result: AvailabilityData[] = [];
+    
+    apiData.forEach(roomData => {
+      Object.entries(roomData.availability).forEach(([dateStr, availableRooms]) => {
+        const date = new Date(dateStr);
+        if (date >= fromDate && date <= toDate) {
+          result.push({
+            roomTypeId: roomData.roomTypeId,
+            date,
+            availableRooms: Number(availableRooms)
+          });
+        }
+      });
+    });
+    
+    return result;
+  };
+
   const fetchAvailabilityData = async (
     hotelCode: string, 
     authCode: string, 
@@ -103,15 +123,35 @@ export function useHotelData() {
     setError(null);
     
     try {
-      // For now, use mock data. Replace with actual API call later
-      const mockData = generateMockData(fromDate, toDate);
+      // Call our Supabase Edge Function
+      const response = await fetch(`https://gpnzoprxtdsymatngkbr.supabase.co/functions/v1/get-availability`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwbnpvcHJ4dGRzeW1hdG5na2JyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NjE4OTksImV4cCI6MjA2ODEzNzg5OX0.9LXIy39UcD15CDvuSafjjmllC-Z5LY0ORWh9c0iumJE`,
+        },
+        body: JSON.stringify({
+          fromDate: fromDate.toISOString().split('T')[0],
+          toDate: toDate.toISOString().split('T')[0],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const apiData = await response.json();
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 800));
+      // Transform API data to our internal format
+      const transformedData = transformApiDataToAvailability(apiData, fromDate, toDate);
+      setAvailabilityData(transformedData);
       
-      setAvailabilityData(mockData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch data');
+      console.error('API fetch error:', err);
+      // Fallback to mock data if API fails
+      const mockData = generateMockData(fromDate, toDate);
+      setAvailabilityData(mockData);
+      setError('Using mock data - API unavailable');
     } finally {
       setLoading(false);
     }
