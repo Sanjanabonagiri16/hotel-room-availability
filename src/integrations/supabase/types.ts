@@ -14,8 +14,113 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
-    }
+      team_members: {
+        Row: {
+          id: string;
+          first_name: string;
+          last_name: string;
+          email: string;
+          role: string;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          first_name: string;
+          last_name: string;
+          email: string;
+          role: string;
+          active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          first_name?: string;
+          last_name?: string;
+          email?: string;
+          role?: string;
+          active?: boolean;
+          created_at?: string;
+        };
+      };
+      agents: {
+        Row: {
+          id: string;
+          name: string;
+          email: string;
+          status: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          email: string;
+          status: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          email?: string;
+          status?: string;
+          created_at?: string;
+        };
+      };
+      hotels: {
+        Row: {
+          id: string;
+          name: string;
+          location: string;
+          code: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          location: string;
+          code: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          location?: string;
+          code?: string;
+        };
+      };
+      team_member_hotels: {
+        Row: {
+          id: string;
+          team_member_id: string;
+          hotel_id: string;
+        };
+        Insert: {
+          id?: string;
+          team_member_id: string;
+          hotel_id: string;
+        };
+        Update: {
+          id?: string;
+          team_member_id?: string;
+          hotel_id?: string;
+        };
+      };
+      agent_hotels: {
+        Row: {
+          id: string;
+          agent_id: string;
+          hotel_id: string;
+        };
+        Insert: {
+          id?: string;
+          agent_id: string;
+          hotel_id: string;
+        };
+        Update: {
+          id?: string;
+          agent_id?: string;
+          hotel_id?: string;
+        };
+      };
+    };
     Views: {
       [_ in never]: never
     }

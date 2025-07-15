@@ -7,10 +7,11 @@ interface AvailabilityRequest {
   roomTypeId?: string
 }
 
-interface RoomAvailability {
+interface RoomInventory {
   roomTypeId: string
-  roomName: string
-  availability: Record<string, number>
+  fromDate: string
+  toDate: string
+  availability: number
 }
 
 serve(async (req) => {
@@ -33,8 +34,8 @@ serve(async (req) => {
       )
     }
 
-    // Get credentials from environment
-    const hotelCode = Deno.env.get('HOTEL_CODE') || '102'
+    // Credentials
+    const hotelCode = '102'
     const authCode = Deno.env.get('HOTEL_AUTH_CODE') || '964565257540601c7c-ed65-11ec-9'
 
     // Construct XML payload
@@ -49,9 +50,7 @@ serve(async (req) => {
   <ToDate>${toDate}</ToDate>
 </RES_Request>`
 
-    console.log('Making request to external API with payload:', xmlPayload)
-
-    // Make request to external API
+    // Make request to XML API endpoint
     const response = await fetch('https://live.ipms247.com/pmsinterface/getdataAPI.php', {
       method: 'POST',
       headers: {
@@ -65,16 +64,13 @@ serve(async (req) => {
     }
 
     const xmlResponse = await response.text()
-    console.log('Received XML response:', xmlResponse)
 
-    // Parse XML to JSON (simple parser for this specific format)
-    const roomAvailability = parseXmlToAvailability(xmlResponse, roomTypeId)
+    // Parse XML response
+    const roomInventories = parseXmlToInventory(xmlResponse, roomTypeId)
 
     return new Response(
-      JSON.stringify(roomAvailability),
-      { 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      }
+      JSON.stringify(roomInventories),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
 
   } catch (error) {
@@ -89,102 +85,40 @@ serve(async (req) => {
   }
 })
 
-function parseXmlToAvailability(xmlString: string, roomTypeFilter?: string): RoomAvailability[] {
-  const results: RoomAvailability[] = []
-  
+function parseXmlToInventory(xmlString: string, roomTypeFilter?: string): RoomInventory[] {
+  const results: RoomInventory[] = [];
   try {
-    // Simple XML parsing for the expected format
-    // Extract room types and their availability
-    const roomTypeRegex = /<RoomType[^>]*>[\s\S]*?<\/RoomType>/g
-    const roomTypeMatches = xmlString.match(roomTypeRegex) || []
+    // Extract the <Source name="Front">...</Source> block
+    const frontSourceMatch = xmlString.match(/<Source name="Front">([\s\S]*?)<\/Source>/);
+    if (!frontSourceMatch) {
+      console.log('No <Source name="Front"> found in XML');
+      return [];
+    }
+    const frontSourceXml = frontSourceMatch[1];
 
-    for (const roomTypeXml of roomTypeMatches) {
-      // Extract room type ID and name
-      const roomTypeIdMatch = roomTypeXml.match(/<RoomTypeId>([^<]+)<\/RoomTypeId>/)
-      const roomNameMatch = roomTypeXml.match(/<RoomTypeName>([^<]+)<\/RoomTypeName>/)
-      
-      if (!roomTypeIdMatch || !roomNameMatch) continue
-      
-      const roomTypeId = roomTypeIdMatch[1]
-      const roomName = roomNameMatch[1]
-
-      // Skip if filtering and this room type doesn't match
-      if (roomTypeFilter && roomTypeId !== roomTypeFilter) continue
-
-      // Extract daily availability
-      const availability: Record<string, number> = {}
-      const inventoryRegex = /<Inventory[^>]*>[\s\S]*?<\/Inventory>/g
-      const inventoryMatches = roomTypeXml.match(inventoryRegex) || []
-
-      for (const inventoryXml of inventoryMatches) {
-        const dateMatch = inventoryXml.match(/<Date>([^<]+)<\/Date>/)
-        const availableMatch = inventoryXml.match(/<Available>([^<]+)<\/Available>/)
-        
-        if (dateMatch && availableMatch) {
-          const date = dateMatch[1]
-          const available = parseInt(availableMatch[1]) || 0
-          availability[date] = available
-        }
-      }
-
+    // Extract RoomType blocks from the Front source
+    const roomTypeRegex = /<RoomType>([\s\S]*?)<\/RoomType>/g;
+    let match;
+    while ((match = roomTypeRegex.exec(frontSourceXml)) !== null) {
+      const roomTypeXml = match[1];
+      // FIX: Use correct case for all tags
+      const roomTypeIdMatch = roomTypeXml.match(/<RoomTypeID>([^<]+)<\/RoomTypeID>/);
+      const fromDateMatch = roomTypeXml.match(/<FromDate>([^<]+)<\/FromDate>/);
+      const toDateMatch = roomTypeXml.match(/<ToDate>([^<]+)<\/ToDate>/);
+      const availabilityMatch = roomTypeXml.match(/<Availability>([^<]+)<\/Availability>/);
+      if (!roomTypeIdMatch || !fromDateMatch || !toDateMatch || !availabilityMatch) continue;
+      const roomTypeId = roomTypeIdMatch[1];
+      if (roomTypeFilter && roomTypeId !== roomTypeFilter) continue;
       results.push({
         roomTypeId,
-        roomName,
-        availability
-      })
+        fromDate: fromDateMatch[1],
+        toDate: toDateMatch[1],
+        availability: parseInt(availabilityMatch[1])
+      });
     }
-
-    // If no results from XML parsing, create mock data for development
-    if (results.length === 0) {
-      console.log('No data parsed from XML, generating mock data')
-      return generateMockAvailability(roomTypeFilter)
-    }
-
-    return results
-
+    return results;
   } catch (error) {
-    console.error('Error parsing XML:', error)
-    // Return mock data on parsing error for development
-    return generateMockAvailability(roomTypeFilter)
+    console.error('Error parsing XML:', error);
+    return [];
   }
-}
-
-function generateMockAvailability(roomTypeFilter?: string): RoomAvailability[] {
-  const mockRoomTypes = [
-    { id: 'deluxe', name: 'Deluxe Room' },
-    { id: 'suite', name: 'Executive Suite' },
-    { id: 'standard', name: 'Standard Room' },
-    { id: 'family', name: 'Family Room' },
-    { id: 'presidential', name: 'Presidential Suite' }
-  ]
-
-  const filteredRoomTypes = roomTypeFilter 
-    ? mockRoomTypes.filter(rt => rt.id === roomTypeFilter)
-    : mockRoomTypes
-
-  return filteredRoomTypes.map(roomType => {
-    const availability: Record<string, number> = {}
-    const today = new Date()
-    
-    // Generate 30 days of mock data
-    for (let i = 0; i < 30; i++) {
-      const date = new Date(today)
-      date.setDate(today.getDate() + i)
-      const dateStr = date.toISOString().split('T')[0]
-      
-      // Generate random availability with patterns
-      let rooms = Math.floor(Math.random() * 8)
-      if (roomType.id === 'presidential') {
-        rooms = Math.floor(Math.random() * 2)
-      }
-      
-      availability[dateStr] = rooms
-    }
-
-    return {
-      roomTypeId: roomType.id,
-      roomName: roomType.name,
-      availability
-    }
-  })
 }

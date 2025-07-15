@@ -1,3 +1,4 @@
+import React from 'react';
 import { useState, useEffect } from 'react';
 
 interface Hotel {
@@ -18,6 +19,14 @@ interface AvailabilityData {
   roomTypeId: string;
   date: Date;
   availableRooms: number;
+}
+
+// Add RoomInventory type for API response
+interface RoomInventory {
+  roomTypeId: string;
+  fromDate: string;
+  toDate: string;
+  availability: number;
 }
 
 // Mock data for development
@@ -55,7 +64,7 @@ const mockRoomTypes: RoomType[] = [
 
 export function useHotelData() {
   const [hotels] = useState<Hotel[]>(mockHotels);
-  const [roomTypes] = useState<RoomType[]>(mockRoomTypes);
+  const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
   const [availabilityData, setAvailabilityData] = useState<AvailabilityData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,22 +103,23 @@ export function useHotelData() {
   };
 
   // Transform API response to our internal format
-  const transformApiDataToAvailability = (apiData: any[], fromDate: Date, toDate: Date): AvailabilityData[] => {
+  const transformApiDataToAvailability = (apiData: RoomInventory[]): AvailabilityData[] => {
     const result: AvailabilityData[] = [];
-    
     apiData.forEach(roomData => {
-      Object.entries(roomData.availability).forEach(([dateStr, availableRooms]) => {
-        const date = new Date(dateStr);
-        if (date >= fromDate && date <= toDate) {
-          result.push({
-            roomTypeId: roomData.roomTypeId,
-            date,
-            availableRooms: Number(availableRooms)
-          });
-        }
-      });
+      const start = new Date(roomData.fromDate);
+      const end = new Date(roomData.toDate);
+      for (
+        let d = new Date(start);
+        d <= end;
+        d.setDate(d.getDate() + 1)
+      ) {
+        result.push({
+          roomTypeId: roomData.roomTypeId,
+          date: new Date(d), // clone the date object
+          availableRooms: Number(roomData.availability)
+        });
+      }
     });
-    
     return result;
   };
 
@@ -140,17 +150,25 @@ export function useHotelData() {
         throw new Error(`API error: ${response.status}`);
       }
 
-      const apiData = await response.json();
-      
+      const apiData: RoomInventory[] = await response.json();
       // Transform API data to our internal format
-      const transformedData = transformApiDataToAvailability(apiData, fromDate, toDate);
+      const transformedData = transformApiDataToAvailability(apiData);
       setAvailabilityData(transformedData);
-      
+
+      // Dynamically extract unique room types from API response
+      const uniqueRoomTypes = Array.from(
+        new Map(
+          apiData.map((room: RoomInventory) => [room.roomTypeId, { id: room.roomTypeId, name: room.roomTypeId, description: "" }])
+        ).values()
+      ) as RoomType[];
+      setRoomTypes(uniqueRoomTypes);
+
     } catch (err) {
       console.error('API fetch error:', err);
       // Fallback to mock data if API fails
       const mockData = generateMockData(fromDate, toDate);
       setAvailabilityData(mockData);
+      setRoomTypes(mockRoomTypes); // fallback to mock room types
       setError('Using mock data - API unavailable');
     } finally {
       setLoading(false);
