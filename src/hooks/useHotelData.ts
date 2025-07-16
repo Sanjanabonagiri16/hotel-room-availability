@@ -29,6 +29,17 @@ interface RoomInventory {
   availability: number;
 }
 
+// Add RoomTypeInfo type for Room Information API
+interface RoomTypeInfo {
+  roomtypeunkid: string;
+  roomtype: string;
+  shortcode?: string;
+  base_adult_occupancy?: string;
+  base_child_occupancy?: string;
+  max_adult_occupancy?: string;
+  max_child_occupancy?: string;
+}
+
 // Mock data for development
 const mockHotels: Hotel[] = [
   {
@@ -68,6 +79,8 @@ export function useHotelData() {
   const [availabilityData, setAvailabilityData] = useState<AvailabilityData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Cache for room type info to avoid redundant API calls
+  const roomTypeInfoCache = React.useRef<{ [hotelCode: string]: RoomTypeInfo[] }>({});
 
   // Generate mock availability data
   const generateMockData = (fromDate: Date, toDate: Date): AvailabilityData[] => {
@@ -123,6 +136,23 @@ export function useHotelData() {
     return result;
   };
 
+  // Fetch real room type info from Room Information API (GET endpoint)
+  const fetchRoomTypeInfo = async (hotelCode: string, apiKey: string): Promise<RoomTypeInfo[]> => {
+    // Check cache first
+    if (roomTypeInfoCache.current[hotelCode]) {
+      return roomTypeInfoCache.current[hotelCode];
+    }
+    // Use Supabase Edge Function as proxy to avoid CORS
+    const url = `https://gpnzoprxtdsymatngkbr.supabase.co/functions/v1/get-roomtypes2?hotelCode=${hotelCode}&apiKey=${apiKey}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Failed to fetch room type info');
+    const data = await response.json();
+    console.log('RoomTypeInfo API response:', data); // DEBUG LOG
+    if (!Array.isArray(data)) throw new Error('Invalid room type info response');
+    roomTypeInfoCache.current[hotelCode] = data;
+    return data;
+  };
+
   const fetchAvailabilityData = async (
     hotelCode: string, 
     authCode: string, 
@@ -131,8 +161,15 @@ export function useHotelData() {
   ) => {
     setLoading(true);
     setError(null);
-    
     try {
+      // Fetch room type info (real names)
+      let realRoomTypes: RoomTypeInfo[] = [];
+      try {
+        realRoomTypes = await fetchRoomTypeInfo(hotelCode, authCode);
+      } catch (e) {
+        // fallback to empty, will use IDs as names
+        realRoomTypes = [];
+      }
       // Call our Supabase Edge Function
       const response = await fetch(`https://gpnzoprxtdsymatngkbr.supabase.co/functions/v1/get-availability`, {
         method: 'POST',
@@ -145,24 +182,34 @@ export function useHotelData() {
           toDate: toDate.toISOString().split('T')[0],
         }),
       });
-
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
-
       const apiData: RoomInventory[] = await response.json();
       // Transform API data to our internal format
       const transformedData = transformApiDataToAvailability(apiData);
       setAvailabilityData(transformedData);
-
       // Dynamically extract unique room types from API response
       const uniqueRoomTypes = Array.from(
         new Map(
-          apiData.map((room: RoomInventory) => [room.roomTypeId, { id: room.roomTypeId, name: room.roomTypeId, description: "" }])
+          apiData.map((room: RoomInventory) => {
+            const found = realRoomTypes.find(rt => rt.roomtypeunkid === room.roomTypeId);
+            if (!found) {
+              console.warn(`No room name found for roomTypeId: ${room.roomTypeId}`);
+            }
+            return [
+              room.roomTypeId,
+              {
+                id: room.roomTypeId,
+                name: found ? found.roomtype : room.roomTypeId,
+                description: found ? found.shortcode || '' : '',
+              },
+            ];
+          })
         ).values()
       ) as RoomType[];
+      console.log('Mapped uniqueRoomTypes:', uniqueRoomTypes); // DEBUG LOG
       setRoomTypes(uniqueRoomTypes);
-
     } catch (err) {
       console.error('API fetch error:', err);
       // Fallback to mock data if API fails

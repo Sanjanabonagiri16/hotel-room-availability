@@ -65,25 +65,43 @@ export function CalendarGrid({ dates, roomTypes, availabilityData, onCellClick, 
           <span className="text-xs text-muted-foreground">Data last updated: {lastUpdated}</span>
         )}
       </div>
-      {/* Sticky date header */}
-      <div className="flex sticky top-[48px] z-10 bg-card/80 backdrop-blur-md border-b shadow-sm">
-        <div className="w-56 font-bold p-2 border-r bg-muted text-sm text-foreground">Room Categories</div>
-        {dates.map(date => (
-          <div key={date.toISOString()} className="flex-1 text-center font-semibold p-2 border-b bg-muted min-w-[80px] text-xs text-foreground">
-            {date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', weekday: 'short' })}
-          </div>
-        ))}
-      </div>
-      <div className="max-h-[420px] overflow-y-auto custom-scrollbar">
-        {roomTypes.filter(rt => visibleRoomTypes.includes(rt.id)).map((roomType, rowIdx) => (
-          <React.Fragment key={roomType.id}>
-            {[...Array(roomTypeCounts[roomType.id] || 1)].map((_, idx) => (
-              <div key={roomType.id + '-' + idx} className={`flex border-b ${rowIdx % 2 === 0 ? 'bg-muted/70' : 'bg-card'} transition-all group hover:bg-primary/5`}>
-                <div className="w-56 p-2 border-r flex items-center gap-2 sticky left-0 z-10 bg-card text-foreground">
+      {/* Grid-based calendar */}
+      <div
+        className="max-h-[420px] overflow-y-auto custom-scrollbar"
+        style={{
+          minWidth: `${224 + dates.length * 90}px`,
+        }}
+      >
+        <div
+          className="grid"
+          style={{
+            gridTemplateColumns: `224px repeat(${dates.length}, 1fr)`
+          }}
+        >
+          {/* Header row: Room Categories + Dates */}
+          <div className="font-bold p-2 border-r bg-muted text-sm text-foreground sticky top-0 left-0 z-20 bg-white/80 backdrop-blur-md border-b shadow-md">Room Categories</div>
+          {dates.map(date => (
+            <div key={date.toISOString()} className="text-center font-semibold p-2 border-b bg-muted min-w-[80px] text-xs text-foreground sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b shadow-md">
+              {date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', weekday: 'short' })}
+            </div>
+          ))}
+          {/* Room rows */}
+          {roomTypes.filter(rt => visibleRoomTypes.includes(rt.id)).map((roomType, rowIdx) => (
+            [...Array(roomTypeCounts[roomType.id] || 1)].map((_, idx) => (
+              <React.Fragment key={roomType.id + '-' + idx}>
+                <div className="p-2 border-r flex items-center gap-2 sticky left-0 z-10 bg-card text-foreground">
                   <button onClick={() => toggleRoomType(roomType.id)} className="text-gray-400 hover:text-gray-700 transition" aria-label="Toggle room type visibility">
                     {visibleRoomTypes.includes(roomType.id) ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                   </button>
-                  <span className="truncate font-medium" title={roomType.id}>{roomType.id}</span>
+                  {/* Show room name with tooltip if long */}
+                  <span className="truncate font-medium max-w-[120px] relative group" style={{display: 'inline-block'}}>
+                    {roomType.name.length > 22 ? `${roomType.name.slice(0, 20)}...` : roomType.name}
+                    {roomType.name.length > 22 && (
+                      <span className="absolute z-20 left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-1 bg-black/90 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none shadow-lg min-w-[180px] text-center">
+                        {roomType.name}
+                      </span>
+                    )}
+                  </span>
                   <button onClick={() => changeRoomTypeCount(roomType.id, -1)} className="ml-auto px-2 rounded hover:bg-gray-200 transition text-lg font-bold" aria-label="Decrease visible rows">-</button>
                   <span className="w-6 text-center font-mono">{roomTypeCounts[roomType.id]}</span>
                   <button onClick={() => changeRoomTypeCount(roomType.id, 1)} className="px-2 rounded hover:bg-gray-200 transition text-lg font-bold" aria-label="Increase visible rows">+</button>
@@ -102,7 +120,7 @@ export function CalendarGrid({ dates, roomTypes, availabilityData, onCellClick, 
                   return (
                     <div
                       key={date.toISOString()}
-                      className={`flex-1 text-center p-2 border-r cursor-pointer min-w-[80px] ${color} transition-all duration-200 hover:scale-105 hover:shadow-lg rounded-lg mx-0.5 my-1 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary animate-fade-in`}
+                      className={`text-center p-2 border-r cursor-pointer min-w-[80px] ${color} transition-all duration-200 hover:scale-105 hover:shadow-lg rounded-lg mx-0.5 my-1 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary animate-fade-in`}
                       onClick={() => onCellClick && onCellClick(date, roomType.id)}
                       tabIndex={0}
                       aria-label={`${roomType.name} on ${date.toLocaleDateString()}: ${cell ? cell.availableRooms : 0} rooms`}
@@ -117,10 +135,10 @@ export function CalendarGrid({ dates, roomTypes, availabilityData, onCellClick, 
                     </div>
                   );
                 })}
-              </div>
-            ))}
-          </React.Fragment>
-        ))}
+              </React.Fragment>
+            ))
+          ))}
+        </div>
       </div>
     </div>
   );
