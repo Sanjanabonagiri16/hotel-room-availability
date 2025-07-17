@@ -165,7 +165,8 @@ export function useHotelData() {
       const fromDateStr = fromDate.toISOString().split('T')[0];
       const toDateStr = toDate.toISOString().split('T')[0];
       console.log('[PMS API] Inventory Proxy Request:', { fromDate: fromDateStr, toDate: toDateStr });
-      const inventoryRes = await fetch('http://localhost:5000/api/pms-inventory', {
+      // Use Netlify function endpoint for inventory fetch
+      const inventoryRes = await fetch('/.netlify/functions/pms-inventory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fromDate: fromDateStr, toDate: toDateStr })
