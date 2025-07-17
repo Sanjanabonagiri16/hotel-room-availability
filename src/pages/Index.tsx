@@ -18,6 +18,7 @@ import { Switch } from '@/components/ui/switch';
 import { useTheme } from 'next-themes';
 
 const Index = () => {
+  console.log('=== COMPONENT STARTING ===');
   const { hotels, roomTypes, availabilityData, loading, error, fetchAvailabilityData } = useHotelData();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -36,6 +37,8 @@ const Index = () => {
   
   // Load data when dependencies change
   useEffect(() => {
+    console.log('=== USE EFFECT TRIGGERED ===');
+    console.log('Current date range:', dateRange.from, dateRange.to);
     const hotel = hotels.find(h => h.id === selectedHotel);
     if (hotel) {
       fetchAvailabilityData(hotel.code, hotel.authCode, dateRange.from, dateRange.to);
@@ -152,6 +155,21 @@ const Index = () => {
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-blue-100 to-indigo-200">
+      {/* Manual Test Button for API Calls */}
+      <div className="fixed top-4 right-4 z-50">
+        <button
+          onClick={() => {
+            console.log('Manual test clicked');
+            const hotel = hotels.find(h => h.id === selectedHotel);
+            if (hotel) {
+              fetchAvailabilityData(hotel.code, hotel.authCode, dateRange.from, dateRange.to);
+            }
+          }}
+          className="px-4 py-2 bg-primary text-white rounded shadow hover:bg-primary/80"
+        >
+          Test API Calls
+        </button>
+      </div>
       {/* Header */}
       <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">

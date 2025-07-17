@@ -47,6 +47,10 @@ export function CalendarGrid({ dates, roomTypes, availabilityData, onCellClick, 
     }));
   };
 
+  // Debug: Log roomTypes and availabilityData before rendering
+  console.log('Room Types (for rendering):', roomTypes);
+  console.log('Availability Data (for rendering):', availabilityData);
+
   return (
     <div className="border rounded-2xl overflow-x-auto bg-card shadow-2xl font-sans relative">
       {/* Sticky top legend and last updated */}
@@ -65,80 +69,112 @@ export function CalendarGrid({ dates, roomTypes, availabilityData, onCellClick, 
           <span className="text-xs text-muted-foreground">Data last updated: {lastUpdated}</span>
         )}
       </div>
-      {/* Grid-based calendar */}
+      {/* Sticky date+availability header using grid */}
       <div
-        className="max-h-[420px] overflow-y-auto custom-scrollbar"
+        className="sticky top-[48px] z-10 bg-card/80 backdrop-blur-md border-b shadow-sm"
         style={{
-          minWidth: `${224 + dates.length * 90}px`,
+          display: 'grid',
+          gridTemplateColumns: `minmax(180px, 1fr) repeat(${dates.length}, minmax(80px, 1fr))`,
+          alignItems: 'center',
         }}
       >
-        <div
-          className="grid"
-          style={{
-            gridTemplateColumns: `224px repeat(${dates.length}, 1fr)`
-          }}
-        >
-          {/* Header row: Room Categories + Dates */}
-          <div className="font-bold p-2 border-r bg-muted text-sm text-foreground sticky top-0 left-0 z-20 bg-white/80 backdrop-blur-md border-b shadow-md">Room Categories</div>
-          {dates.map(date => (
-            <div key={date.toISOString()} className="text-center font-semibold p-2 border-b bg-muted min-w-[80px] text-xs text-foreground sticky top-0 z-10 bg-white/80 backdrop-blur-md border-b shadow-md">
-              {date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', weekday: 'short' })}
+        <div className="font-bold p-2 border-r bg-muted text-sm text-foreground text-center">Room Categories</div>
+        {dates.map(date => {
+          const totalAvailable = roomTypes
+            .filter(rt => visibleRoomTypes.includes(rt.id))
+            .reduce((sum, rt) => {
+              const cell = availabilityData.find(a => a.roomTypeId === rt.id && a.date.toDateString() === date.toDateString());
+              return sum + (cell ? cell.availableRooms : 0);
+            }, 0);
+          let color = "text-gray-700";
+          if (totalAvailable >= 4) color = "text-green-800";
+          else if (totalAvailable >= 1) color = "text-yellow-800";
+          else color = "text-red-800";
+          return (
+            <div key={date.toISOString()} className="flex flex-col items-center justify-center border-r min-w-[80px] px-2 py-2 text-xs text-foreground text-center">
+              <span>{date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', weekday: 'short' })}</span>
+              <span className={`mt-1 text-lg font-bold ${color}`}>{totalAvailable}</span>
             </div>
-          ))}
-          {/* Room rows */}
-          {roomTypes.filter(rt => visibleRoomTypes.includes(rt.id)).map((roomType, rowIdx) => (
-            [...Array(roomTypeCounts[roomType.id] || 1)].map((_, idx) => (
-              <React.Fragment key={roomType.id + '-' + idx}>
-                <div className="p-2 border-r flex items-center gap-2 sticky left-0 z-10 bg-card text-foreground">
-                  <button onClick={() => toggleRoomType(roomType.id)} className="text-gray-400 hover:text-gray-700 transition" aria-label="Toggle room type visibility">
-                    {visibleRoomTypes.includes(roomType.id) ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                  </button>
-                  {/* Show room name with tooltip if long */}
-                  <span className="truncate font-medium max-w-[120px] relative group" style={{display: 'inline-block'}}>
-                    {roomType.name.length > 22 ? `${roomType.name.slice(0, 20)}...` : roomType.name}
-                    {roomType.name.length > 22 && (
-                      <span className="absolute z-20 left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-1 bg-black/90 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none shadow-lg min-w-[180px] text-center">
-                        {roomType.name}
+          );
+        })}
+      </div>
+      {/* Grid rows for room types */}
+      <div className="max-h-[420px] overflow-y-auto custom-scrollbar">
+        {roomTypes.filter(rt => visibleRoomTypes.includes(rt.id)).map((roomType, rowIdx) => (
+          [...Array(roomTypeCounts[roomType.id] || 1)].map((_, idx) => (
+            <div
+              key={roomType.id + '-' + idx}
+              className={`transition-all group hover:bg-primary/5`}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: `minmax(180px, 1fr) repeat(${dates.length}, minmax(80px, 1fr))`,
+                alignItems: 'center',
+              }}
+            >
+              <div className="p-2 border-r flex items-center gap-2 bg-card text-foreground min-w-[180px]">
+                <button onClick={() => toggleRoomType(roomType.id)} className="text-gray-400 hover:text-gray-700 transition" aria-label="Toggle room type visibility">
+                  {visibleRoomTypes.includes(roomType.id) ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                </button>
+                {/* Render roomType.name instead of id */}
+                <span className="truncate font-medium" title={roomType.name}>{roomType.name}</span>
+                <button onClick={() => changeRoomTypeCount(roomType.id, -1)} className="ml-auto px-2 rounded hover:bg-gray-200 transition text-lg font-bold" aria-label="Decrease visible rows">-</button>
+                <span className="w-6 text-center font-mono">{roomTypeCounts[roomType.id]}</span>
+                <button onClick={() => changeRoomTypeCount(roomType.id, 1)} className="px-2 rounded hover:bg-gray-200 transition text-lg font-bold" aria-label="Increase visible rows">+</button>
+              </div>
+              {dates.map(date => {
+                // Use ISO date string for robust comparison
+                const gridDateString = date.toISOString().slice(0, 10);
+                const cell = availabilityData.find(
+                  a => a.roomTypeId === roomType.id && a.date.toISOString().slice(0, 10) === gridDateString
+                );
+                // Debug: Log all relevant info for this cell
+                const inventoryForRoom = availabilityData
+                  .filter(a => a.roomTypeId === roomType.id)
+                  .map(a => ({
+                    date: a.date,
+                    dateString: a.date.toISOString().slice(0, 10),
+                    availableRooms: a.availableRooms
+                  }));
+                console.log('Grid cell:', {
+                  roomTypeId: roomType.id,
+                  gridDate: date,
+                  gridDateString,
+                  inventory: inventoryForRoom,
+                  foundCell: cell
+                });
+                if (!cell) {
+                  console.warn(`No availability data for roomTypeId=${roomType.id} on date=${date}`);
+                } else if (cell.availableRooms === 0) {
+                  console.warn(`Zero availability for roomTypeId=${roomType.id} on date=${date}`);
+                }
+                let color = "bg-gray-200 text-gray-700";
+                let badge = "";
+                if (cell) {
+                  if (cell.availableRooms >= 4) { color = "bg-green-100 text-green-800"; badge = "bg-green-500"; }
+                  else if (cell.availableRooms >= 1) { color = "bg-yellow-100 text-yellow-800"; badge = "bg-yellow-500"; }
+                  else { color = "bg-red-100 text-red-800"; badge = "bg-red-500"; }
+                }
+                return (
+                  <div
+                    key={date.toISOString()}
+                    className={`text-center border-r min-w-[80px] p-2 ${color} transition-all duration-200 hover:scale-105 hover:shadow-lg rounded-lg mx-0.5 my-1 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary animate-fade-in`}
+                    onClick={() => onCellClick && onCellClick(date, roomType.id)}
+                    tabIndex={0}
+                    aria-label={`${roomType.name} on ${date.toLocaleDateString()}: ${cell ? cell.availableRooms : '—'} rooms`}
+                  >
+                    <span className="relative group">
+                      <span className={`w-8 h-8 rounded-full font-bold flex items-center justify-center shadow transition-colors duration-300 ${badge} text-white text-base`}>{cell ? cell.availableRooms : "—"}</span>
+                      <span className="absolute z-20 left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-1 bg-black/90 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none shadow-lg">
+                        <span className="font-semibold">{roomType.name}</span><br />
+                        {date.toLocaleDateString()}: <span className="font-mono">{cell ? cell.availableRooms : '—'}</span> rooms
                       </span>
-                    )}
-                  </span>
-                  <button onClick={() => changeRoomTypeCount(roomType.id, -1)} className="ml-auto px-2 rounded hover:bg-gray-200 transition text-lg font-bold" aria-label="Decrease visible rows">-</button>
-                  <span className="w-6 text-center font-mono">{roomTypeCounts[roomType.id]}</span>
-                  <button onClick={() => changeRoomTypeCount(roomType.id, 1)} className="px-2 rounded hover:bg-gray-200 transition text-lg font-bold" aria-label="Increase visible rows">+</button>
-                </div>
-                {dates.map(date => {
-                  const cell = availabilityData.find(
-                    a => a.roomTypeId === roomType.id && a.date.toDateString() === date.toDateString()
-                  );
-                  let color = "bg-gray-200 text-gray-700";
-                  let badge = "";
-                  if (cell) {
-                    if (cell.availableRooms >= 4) { color = "bg-green-100 text-green-800"; badge = "bg-green-500"; }
-                    else if (cell.availableRooms >= 1) { color = "bg-yellow-100 text-yellow-800"; badge = "bg-yellow-500"; }
-                    else { color = "bg-red-100 text-red-800"; badge = "bg-red-500"; }
-                  }
-                  return (
-                    <div
-                      key={date.toISOString()}
-                      className={`text-center p-2 border-r cursor-pointer min-w-[80px] ${color} transition-all duration-200 hover:scale-105 hover:shadow-lg rounded-lg mx-0.5 my-1 flex items-center justify-center focus:outline-none focus:ring-2 focus:ring-primary animate-fade-in`}
-                      onClick={() => onCellClick && onCellClick(date, roomType.id)}
-                      tabIndex={0}
-                      aria-label={`${roomType.name} on ${date.toLocaleDateString()}: ${cell ? cell.availableRooms : 0} rooms`}
-                    >
-                      <span className="relative group">
-                        <span className={`w-8 h-8 rounded-full font-bold flex items-center justify-center shadow transition-colors duration-300 ${badge} text-white text-base`}>{cell ? cell.availableRooms : "-"}</span>
-                        <span className="absolute z-20 left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-1 bg-black/90 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none shadow-lg">
-                          <span className="font-semibold">{roomType.name}</span><br />
-                          {date.toLocaleDateString()}: <span className="font-mono">{cell ? cell.availableRooms : 0}</span> rooms
-                        </span>
-                      </span>
-                    </div>
-                  );
-                })}
-              </React.Fragment>
-            ))
-          ))}
-        </div>
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ))
+        ))}
       </div>
     </div>
   );

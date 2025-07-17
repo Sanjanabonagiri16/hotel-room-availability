@@ -29,17 +29,6 @@ interface RoomInventory {
   availability: number;
 }
 
-// Add RoomTypeInfo type for Room Information API
-interface RoomTypeInfo {
-  roomtypeunkid: string;
-  roomtype: string;
-  shortcode?: string;
-  base_adult_occupancy?: string;
-  base_child_occupancy?: string;
-  max_adult_occupancy?: string;
-  max_child_occupancy?: string;
-}
-
 // Mock data for development
 const mockHotels: Hotel[] = [
   {
@@ -79,8 +68,6 @@ export function useHotelData() {
   const [availabilityData, setAvailabilityData] = useState<AvailabilityData[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Cache for room type info to avoid redundant API calls
-  const roomTypeInfoCache = React.useRef<{ [hotelCode: string]: RoomTypeInfo[] }>({});
 
   // Generate mock availability data
   const generateMockData = (fromDate: Date, toDate: Date): AvailabilityData[] => {
@@ -136,98 +123,137 @@ export function useHotelData() {
     return result;
   };
 
-  // Fetch real room type info from Room Information API (GET endpoint)
-  const fetchRoomTypeInfo = async (hotelCode: string, apiKey: string): Promise<RoomTypeInfo[]> => {
-    // Check cache first
-    if (roomTypeInfoCache.current[hotelCode]) {
-      return roomTypeInfoCache.current[hotelCode];
-    }
-    // Use Supabase Edge Function as proxy to avoid CORS
-    const url = `https://gpnzoprxtdsymatngkbr.supabase.co/functions/v1/get-roomtypes2?hotelCode=${hotelCode}&apiKey=${apiKey}`;
-    const response = await fetch(url);
-    if (!response.ok) throw new Error('Failed to fetch room type info');
-    const data = await response.json();
-    console.log('RoomTypeInfo API response:', data); // DEBUG LOG
-    if (!Array.isArray(data)) throw new Error('Invalid room type info response');
-    roomTypeInfoCache.current[hotelCode] = data;
-    return data;
-  };
-
-  const fetchAvailabilityData = async (
-    hotelCode: string, 
-    authCode: string, 
-    fromDate: Date, 
+  // New: Combined fetch for RoomInfo and Inventory
+  const fetchHotelData = async (
+    hotelCode: string,
+    authCode: string,
+    fromDate: Date,
     toDate: Date
   ) => {
+    console.log('=== FETCH HOTEL DATA STARTED ===');
     setLoading(true);
     setError(null);
     try {
-      // Fetch room type info (real names)
-      let realRoomTypes: RoomTypeInfo[] = [];
-      try {
-        realRoomTypes = await fetchRoomTypeInfo(hotelCode, authCode);
-      } catch (e) {
-        // fallback to empty, will use IDs as names
-        realRoomTypes = [];
-      }
-      // Call our Supabase Edge Function
-      const response = await fetch(`https://gpnzoprxtdsymatngkbr.supabase.co/functions/v1/get-availability`, {
+      // API 1: RoomInfo (room types)
+      const roomInfoPayload = {
+        RES_Request: {
+          Request_Type: 'RoomInfo',
+          NeedPhysicalRooms: 1,
+          Authentication: {
+            HotelCode: hotelCode,
+            AuthCode: authCode
+          }
+        }
+      };
+      const roomInfoRes = await fetch('/api/pms/pms_connectivity.php', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwbnpvcHJ4dGRzeW1hdG5na2JyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NjE4OTksImV4cCI6MjA2ODEzNzg5OX0.9LXIy39UcD15CDvuSafjjmllC-Z5LY0ORWh9c0iumJE`,
-        },
-        body: JSON.stringify({
-          fromDate: fromDate.toISOString().split('T')[0],
-          toDate: toDate.toISOString().split('T')[0],
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(roomInfoPayload)
       });
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+      const roomInfoData = await roomInfoRes.json();
+      console.log('[PMS API] RoomInfo Response:', roomInfoData);
+      // Parse room types
+      let roomTypesArr: RoomType[] = [];
+      if (roomInfoData.RoomInfo && roomInfoData.RoomInfo.RoomTypes && Array.isArray(roomInfoData.RoomInfo.RoomTypes.RoomType)) {
+        roomTypesArr = roomInfoData.RoomInfo.RoomTypes.RoomType.map((rt: any) => ({
+          id: rt.ID || rt.Name,
+          name: rt.Name,
+          description: rt.Description || ''
+        }));
       }
-      const apiData: RoomInventory[] = await response.json();
-      // Transform API data to our internal format
-      const transformedData = transformApiDataToAvailability(apiData);
-      setAvailabilityData(transformedData);
-      // Dynamically extract unique room types from API response
-      const uniqueRoomTypes = Array.from(
-        new Map(
-          apiData.map((room: RoomInventory) => {
-            const found = realRoomTypes.find(rt => rt.roomtypeunkid === room.roomTypeId);
-            if (!found) {
-              console.warn(`No room name found for roomTypeId: ${room.roomTypeId}`);
-            }
-            return [
-              room.roomTypeId,
-              {
-                id: room.roomTypeId,
-                name: found ? found.roomtype : room.roomTypeId,
-                description: found ? found.shortcode || '' : '',
-              },
-            ];
-          })
-        ).values()
-      ) as RoomType[];
-      console.log('Mapped uniqueRoomTypes:', uniqueRoomTypes); // DEBUG LOG
-      setRoomTypes(uniqueRoomTypes);
-    } catch (err) {
-      console.error('API fetch error:', err);
-      // Fallback to mock data if API fails
-      const mockData = generateMockData(fromDate, toDate);
-      setAvailabilityData(mockData);
-      setRoomTypes(mockRoomTypes); // fallback to mock room types
-      setError('Using mock data - API unavailable');
+      // API 2: Inventory (availability, XML via backend proxy)
+      const fromDateStr = fromDate.toISOString().split('T')[0];
+      const toDateStr = toDate.toISOString().split('T')[0];
+      console.log('[PMS API] Inventory Proxy Request:', { fromDate: fromDateStr, toDate: toDateStr });
+      const inventoryRes = await fetch('http://localhost:5000/api/pms-inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fromDate: fromDateStr, toDate: toDateStr })
+      });
+      console.log('[PMS API] Inventory Proxy Response Status:', inventoryRes.status);
+      const xmlText = await inventoryRes.text();
+      console.log('[PMS API] Inventory Proxy Raw XML Response:', xmlText);
+      if (inventoryRes.status !== 200) {
+        console.error('[PMS API] Inventory API call failed with status:', inventoryRes.status);
+        throw new Error('Inventory API call failed');
+      }
+      // Parse XML for inventory data (extract only <Source name="Front">)
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(xmlText, 'application/xml');
+      // Check for errors
+      const errorCode = xmlDoc.querySelector('ErrorCode')?.textContent;
+      const errorMessage = xmlDoc.querySelector('ErrorMessage')?.textContent;
+      if (errorCode) {
+        throw new Error(`API Error ${errorCode}: ${errorMessage}`);
+      }
+      // Find the <Source name="Front"> node
+      const sources = Array.from(xmlDoc.querySelectorAll('RoomInfo > Source'));
+      const frontSource = sources.find(source => source.getAttribute('name') === 'Front');
+      if (!frontSource) {
+        console.error('Front source not found in XML response');
+        setAvailabilityData([]);
+        return;
+      }
+      // Use the real RoomTypeIDs from the PMS API response
+      const mappedRoomTypes: RoomType[] = [
+        { id: "10200000000000001", name: "Suite", description: "" },
+        { id: "10200000000000002", name: "Superior", description: "" },
+        { id: "10200000000000003", name: "Deluxe", description: "" },
+        { id: "10200000000000004", name: "Standard", description: "" },
+        { id: "10200000000000005", name: "Premium", description: "" },
+        { id: "10200000000000009", name: "Executive", description: "" }
+      ];
+      // Make sure your grid's date range is set to 2025-07-17 to 2025-07-31 for testing
+      const roomTypeNodes = frontSource.querySelectorAll('RoomType');
+      const inventoryArr: AvailabilityData[] = [];
+      roomTypeNodes.forEach(roomType => {
+        const roomTypeId = roomType.querySelector('RoomTypeID')?.textContent?.trim();
+        const availability = parseInt(roomType.querySelector('Availability')?.textContent?.trim() || '0', 10);
+        const fromDate = roomType.querySelector('FromDate')?.textContent?.trim();
+        const toDate = roomType.querySelector('ToDate')?.textContent?.trim();
+        if (roomTypeId && fromDate && toDate) {
+          for (
+            let d = new Date(fromDate);
+            d <= new Date(toDate);
+            d.setDate(d.getDate() + 1)
+          ) {
+            const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            inventoryArr.push({
+              roomTypeId,
+              date: day,
+              availableRooms: availability
+            });
+            // Log each parsed entry
+            console.log('[Parsed Inventory Entry]', { roomTypeId, date: day, availableRooms: availability });
+          }
+        } else {
+          console.warn('[PMS API] Skipped RoomType node due to missing data:', { roomTypeId, fromDate, toDate, availability });
+        }
+      });
+      console.log('Final RoomTypes:', mappedRoomTypes);
+      console.log('Final AvailabilityData:', inventoryArr);
+      setAvailabilityData(inventoryArr);
+      setRoomTypes(mappedRoomTypes);
+    } catch (err: unknown) {
+      console.error('=== FETCH HOTEL DATA ERROR ===', err);
+      let errorMsg = 'Unknown error';
+      if (err instanceof Error) errorMsg = err.message;
+      else if (typeof err === 'string') errorMsg = err;
+      setError(`PMS API error: ${errorMsg}`);
+      setAvailabilityData([]);
+      setRoomTypes([]);
     } finally {
       setLoading(false);
     }
   };
 
+  // Replace fetchAvailabilityData with fetchHotelData in the hook's return and usage
   return {
     hotels,
     roomTypes,
     availabilityData,
     loading,
     error,
-    fetchAvailabilityData
+    fetchAvailabilityData: fetchHotelData
   };
 }
