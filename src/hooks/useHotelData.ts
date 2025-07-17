@@ -125,9 +125,9 @@ export function useHotelData() {
 
   // New: Combined fetch for RoomInfo and Inventory
   const fetchHotelData = async (
-    hotelCode: string,
-    authCode: string,
-    fromDate: Date,
+    hotelCode: string, 
+    authCode: string, 
+    fromDate: Date, 
     toDate: Date
   ) => {
     console.log('=== FETCH HOTEL DATA STARTED ===');

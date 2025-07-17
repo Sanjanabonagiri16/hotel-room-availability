@@ -95,15 +95,6 @@ export function EditRoomTypeDialog({ open, onOpenChange, roomTypes, onSave }: Ed
               <BedDouble className="w-6 h-6 text-primary" />
               Room Types for Hotel 102
             </span>
-            <button
-              onClick={handleSignOut}
-              className="ml-auto flex items-center gap-2 px-3 py-1 rounded-lg bg-card shadow hover:bg-muted text-foreground font-semibold transition text-sm border border-border"
-              title="Sign Out"
-              style={{ position: 'absolute', right: 24, top: 24 }}
-            >
-              <Settings2 className="w-4 h-4" />
-              Sign Out
-            </button>
           </DialogTitle>
           <DialogDescription id="edit-room-type-desc">
             Edit the details and display rules for these room types. Changes will affect how these room types appear in the calendar.

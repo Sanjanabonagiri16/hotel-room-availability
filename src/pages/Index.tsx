@@ -155,8 +155,8 @@ const Index = () => {
 
   return (
     <div className="relative min-h-screen bg-gradient-to-br from-blue-100 to-indigo-200">
-      {/* Manual Test Button for API Calls */}
-      <div className="fixed top-4 right-4 z-50">
+      {/* Remove Manual Test Button for API Calls */}
+      {/* <div className="fixed top-4 right-4 z-50">
         <button
           onClick={() => {
             console.log('Manual test clicked');
@@ -169,7 +169,7 @@ const Index = () => {
         >
           Test API Calls
         </button>
-      </div>
+      </div> */}
       {/* Header */}
       <div className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-40">
         <div className="container mx-auto px-4 py-4">
@@ -293,16 +293,16 @@ const Index = () => {
       </div>
       {/* Dialogs */}
       <EditRoomTypeDialog
-        open={roomTypeDialogOpen && Array.isArray(roomTypes)}
+        open={roomTypeDialogOpen}
         onOpenChange={setRoomTypeDialogOpen}
-        roomTypes={Array.isArray(roomTypes) && roomTypes.length > 0 ? roomTypes.map(rt => ({
+        roomTypes={roomTypes.map(rt => ({
           ...rt,
           active: true,
           ruleType: '',
           ruleValue: '',
           minThreshold: ''
-        })) : []}
-        onSave={(updated) => { setRoomTypeDialogOpen(false); }}
+        }))}
+        onSave={() => {}}
       />
       {/* Settings Dialog */}
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
