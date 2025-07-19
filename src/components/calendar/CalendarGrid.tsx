@@ -149,10 +149,15 @@ export function CalendarGrid({ dates, roomTypes, availabilityData, onCellClick, 
                 }
                 let color = "bg-gray-200 text-gray-700";
                 let badge = "";
+                let isUnknown = false;
                 if (cell) {
                   if (cell.availableRooms >= 4) { color = "bg-green-100 text-green-800"; badge = "bg-green-500"; }
                   else if (cell.availableRooms >= 1) { color = "bg-yellow-100 text-yellow-800"; badge = "bg-yellow-500"; }
                   else { color = "bg-red-100 text-red-800"; badge = "bg-red-500"; }
+                } else {
+                  // Unknown/missing data styling
+                  color = "bg-available-unknown border-available-unknown/40 text-muted-foreground";
+                  isUnknown = true;
                 }
                 return (
                   <div
@@ -163,10 +168,11 @@ export function CalendarGrid({ dates, roomTypes, availabilityData, onCellClick, 
                     aria-label={`${roomType.name} on ${date.toLocaleDateString()}: ${cell ? cell.availableRooms : '—'} rooms`}
                   >
                     <span className="relative group">
-                      <span className={`w-8 h-8 rounded-full font-bold flex items-center justify-center shadow transition-colors duration-300 ${badge} text-white text-base`}>{cell ? cell.availableRooms : "—"}</span>
+                      <span className={`w-8 h-8 rounded-full font-bold flex items-center justify-center shadow transition-colors duration-300 ${badge} ${isUnknown ? 'text-lg text-gray-800 font-extrabold bg-available-unknown border border-available-unknown/60' : 'text-white text-base'}`}>{cell ? cell.availableRooms : "—"}</span>
                       <span className="absolute z-20 left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-1 bg-black/90 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap pointer-events-none shadow-lg">
                         <span className="font-semibold">{roomType.name}</span><br />
-                        {date.toLocaleDateString()}: <span className="font-mono">{cell ? cell.availableRooms : '—'}</span> rooms
+                        {date.toLocaleDateString()}: <span className="font-mono">{cell ? cell.availableRooms : '—'}</span> rooms<br />
+                        {isUnknown && <span className="text-yellow-300 font-semibold">No data available</span>}
                       </span>
                     </span>
                   </div>
