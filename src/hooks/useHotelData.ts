@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { useState, useEffect } from 'react';
 
@@ -54,14 +55,6 @@ const mockHotels: Hotel[] = [
   }
 ];
 
-const mockRoomTypes: RoomType[] = [
-  { id: 'deluxe', name: 'Deluxe Room', description: 'Spacious room with city view' },
-  { id: 'suite', name: 'Executive Suite', description: 'Luxury suite with balcony' },
-  { id: 'standard', name: 'Standard Room', description: 'Comfortable standard accommodation' },
-  { id: 'family', name: 'Family Room', description: 'Perfect for families, sleeps 4' },
-  { id: 'presidential', name: 'Presidential Suite', description: 'Ultimate luxury experience' }
-];
-
 export function useHotelData() {
   const [hotels] = useState<Hotel[]>(mockHotels);
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
@@ -69,8 +62,8 @@ export function useHotelData() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Generate mock availability data
-  const generateMockData = (fromDate: Date, toDate: Date): AvailabilityData[] => {
+  // Generate mock availability data based on room types
+  const generateMockAvailabilityData = (roomTypes: RoomType[], fromDate: Date, toDate: Date): AvailabilityData[] => {
     const data: AvailabilityData[] = [];
     const currentDate = new Date(fromDate);
     
@@ -84,9 +77,9 @@ export function useHotelData() {
           rooms = Math.floor(rooms * 0.6);
         }
         
-        // Presidential suites are always scarce
-        if (roomType.id === 'presidential') {
-          rooms = Math.floor(Math.random() * 2);
+        // Some room types are always scarce
+        if (roomType.name.toLowerCase().includes('presidential') || roomType.name.toLowerCase().includes('suite')) {
+          rooms = Math.floor(rooms * 0.4);
         }
         
         data.push({
@@ -102,28 +95,7 @@ export function useHotelData() {
     return data;
   };
 
-  // Transform API response to our internal format
-  const transformApiDataToAvailability = (apiData: RoomInventory[]): AvailabilityData[] => {
-    const result: AvailabilityData[] = [];
-    apiData.forEach(roomData => {
-      const start = new Date(roomData.fromDate);
-      const end = new Date(roomData.toDate);
-      for (
-        let d = new Date(start);
-        d <= end;
-        d.setDate(d.getDate() + 1)
-      ) {
-        result.push({
-          roomTypeId: roomData.roomTypeId,
-          date: new Date(d), // clone the date object
-          availableRooms: Number(roomData.availability)
-        });
-      }
-    });
-    return result;
-  };
-
-  // New: Combined fetch for RoomInfo and Inventory
+  // Fetch hotel data using RoomInfo API only
   const fetchHotelData = async (
     hotelCode: string, 
     authCode: string, 
@@ -134,7 +106,7 @@ export function useHotelData() {
     setLoading(true);
     setError(null);
     try {
-      // API 1: RoomInfo (room types) - Use Supabase Edge Function
+      // API: RoomInfo (room types) - Use Supabase Edge Function
       console.log('[PMS API] Fetching room info for hotel:', hotelCode);
       const roomInfoRes = await fetch(`https://gpnzoprxtdsymatngkbr.supabase.co/functions/v1/get-room-info`, {
         method: 'POST',
@@ -158,72 +130,15 @@ export function useHotelData() {
         name: rt.name,
         description: rt.description || ''
       }));
-      // API 2: Inventory (availability, XML via backend proxy)
-      const fromDateStr = fromDate.toISOString().split('T')[0];
-      const toDateStr = toDate.toISOString().split('T')[0];
-      console.log('[PMS API] Inventory Proxy Request:', { fromDate: fromDateStr, toDate: toDateStr });
-      // Use Netlify function endpoint for inventory fetch
-      const inventoryRes = await fetch('/.netlify/functions/pms-inventory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fromDate: fromDateStr, toDate: toDateStr })
-      });
-      console.log('[PMS API] Inventory Proxy Response Status:', inventoryRes.status);
-      const xmlText = await inventoryRes.text();
-      console.log('[PMS API] Inventory Proxy Raw XML Response:', xmlText);
-      if (inventoryRes.status !== 200) {
-        console.error('[PMS API] Inventory API call failed with status:', inventoryRes.status);
-        throw new Error('Inventory API call failed');
-      }
-      // Parse XML for inventory data (extract only <Source name="Front">)
-      const parser = new DOMParser();
-      const xmlDoc = parser.parseFromString(xmlText, 'application/xml');
-      // Check for errors
-      const errorCode = xmlDoc.querySelector('ErrorCode')?.textContent;
-      const errorMessage = xmlDoc.querySelector('ErrorMessage')?.textContent;
-      if (errorCode) {
-        throw new Error(`API Error ${errorCode}: ${errorMessage}`);
-      }
-      // Find the <Source name="Front"> node
-      const sources = Array.from(xmlDoc.querySelectorAll('RoomInfo > Source'));
-      const frontSource = sources.find(source => source.getAttribute('name') === 'Front');
-      if (!frontSource) {
-        console.error('Front source not found in XML response');
-        setAvailabilityData([]);
-        return;
-      }
-      // Use room types from API instead of hardcoded mapping
-      // Make sure your grid's date range is set to 2025-07-17 to 2025-07-31 for testing
-      const roomTypeNodes = frontSource.querySelectorAll('RoomType');
-      const inventoryArr: AvailabilityData[] = [];
-      roomTypeNodes.forEach(roomType => {
-        const roomTypeId = roomType.querySelector('RoomTypeID')?.textContent?.trim();
-        const availability = parseInt(roomType.querySelector('Availability')?.textContent?.trim() || '0', 10);
-        const fromDate = roomType.querySelector('FromDate')?.textContent?.trim();
-        const toDate = roomType.querySelector('ToDate')?.textContent?.trim();
-        if (roomTypeId && fromDate && toDate) {
-          for (
-            let d = new Date(fromDate);
-            d <= new Date(toDate);
-            d.setDate(d.getDate() + 1)
-          ) {
-            const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-            inventoryArr.push({
-              roomTypeId,
-              date: day,
-              availableRooms: availability
-            });
-            // Log each parsed entry
-            console.log('[Parsed Inventory Entry]', { roomTypeId, date: day, availableRooms: availability });
-          }
-        } else {
-          console.warn('[PMS API] Skipped RoomType node due to missing data:', { roomTypeId, fromDate, toDate, availability });
-        }
-      });
+
+      // Generate mock availability data for the room types we received
+      const mockAvailabilityData = generateMockAvailabilityData(roomTypesArr, fromDate, toDate);
+      
       console.log('Final RoomTypes:', roomTypesArr);
-      console.log('Final AvailabilityData:', inventoryArr);
-      setAvailabilityData(inventoryArr);
+      console.log('Final AvailabilityData:', mockAvailabilityData);
+      
       setRoomTypes(roomTypesArr);
+      setAvailabilityData(mockAvailabilityData);
     } catch (err: unknown) {
       console.error('=== FETCH HOTEL DATA ERROR ===', err);
       let errorMsg = 'Unknown error';
@@ -237,7 +152,7 @@ export function useHotelData() {
     }
   };
 
-  // New function to fetch available rooms for booking
+  // Function to fetch available rooms for booking
   const fetchAvailableRooms = async (
     hotelCode: string,
     fromDate: Date,
@@ -283,7 +198,6 @@ export function useHotelData() {
     }
   };
 
-  // Replace fetchAvailabilityData with fetchHotelData in the hook's return and usage
   return {
     hotels,
     roomTypes,
