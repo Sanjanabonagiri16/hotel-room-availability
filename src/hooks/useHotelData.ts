@@ -62,15 +62,17 @@ export function useHotelData() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Generate mock availability data based on room types
+  // Generate mock availability data based on room types with proper date handling
   const generateMockAvailabilityData = (roomTypes: RoomType[], fromDate: Date, toDate: Date): AvailabilityData[] => {
     const data: AvailabilityData[] = [];
-    const currentDate = new Date(fromDate);
+    // Create proper date objects to avoid timezone issues
+    const currentDate = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+    const endDate = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
     
-    while (currentDate <= toDate) {
+    while (currentDate <= endDate) {
       roomTypes.forEach(roomType => {
-        // Generate random availability with some patterns
-        let rooms = Math.floor(Math.random() * 8);
+        // Generate realistic availability with some patterns
+        let rooms = Math.floor(Math.random() * 8) + 1; // 1-8 rooms available
         
         // Make weekends more scarce
         if (currentDate.getDay() === 0 || currentDate.getDay() === 6) {
@@ -78,13 +80,15 @@ export function useHotelData() {
         }
         
         // Some room types are always scarce
-        if (roomType.name.toLowerCase().includes('presidential') || roomType.name.toLowerCase().includes('suite')) {
-          rooms = Math.floor(rooms * 0.4);
+        if (roomType.name.toLowerCase().includes('presidential') || 
+            roomType.name.toLowerCase().includes('ultra') ||
+            roomType.name.toLowerCase().includes('suite')) {
+          rooms = Math.floor(rooms * 0.5) + 1; // At least 1 room
         }
         
         data.push({
           roomTypeId: roomType.id,
-          date: new Date(currentDate),
+          date: new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()),
           availableRooms: rooms
         });
       });
@@ -92,7 +96,71 @@ export function useHotelData() {
       currentDate.setDate(currentDate.getDate() + 1);
     }
     
+    console.log(`Generated availability data from ${fromDate.toDateString()} to ${toDate.toDateString()}`);
     return data;
+  };
+
+  // Fetch real availability data from room availability API
+  const fetchRealAvailabilityData = async (
+    hotelCode: string, 
+    authCode: string,
+    roomTypes: RoomType[], 
+    fromDate: Date, 
+    toDate: Date
+  ): Promise<AvailabilityData[]> => {
+    const fromDateStr = `${fromDate.getFullYear()}-${String(fromDate.getMonth() + 1).padStart(2, '0')}-${String(fromDate.getDate()).padStart(2, '0')}`;
+    const toDateStr = `${toDate.getFullYear()}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`;
+    
+    console.log(`[Real Availability API] Fetching for all room types from ${fromDateStr} to ${toDateStr}`);
+    
+    const response = await fetch(`https://gpnzoprxtdsymatngkbr.supabase.co/functions/v1/get-room-availability`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwbnpvcHJ4dGRzeW1hdG5na2JyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NjE4OTksImV4cCI6MjA2ODEzNzg5OX0.9LXIy39UcD15CDvuSafjjmllC-Z5LY0ORWh9c0iumJE`
+      },
+      body: JSON.stringify({ 
+        hotelCode, 
+        fromDate: fromDateStr, 
+        toDate: toDateStr
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Real availability API failed with status: ${response.status}`);
+    }
+
+    const availabilityResponse = await response.json();
+    console.log('[Real Availability API] Response:', availabilityResponse);
+    
+    // Convert real availability data to our format
+    const realAvailabilityData: AvailabilityData[] = [];
+    const currentDate = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate());
+    const endDate = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate());
+    
+    while (currentDate <= endDate) {
+      if (availabilityResponse.availableRooms && Array.isArray(availabilityResponse.availableRooms)) {
+        availabilityResponse.availableRooms.forEach((roomTypeData: any) => {
+          realAvailabilityData.push({
+            roomTypeId: roomTypeData.roomTypeId,
+            date: new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()),
+            availableRooms: roomTypeData.availableCount || 0
+          });
+        });
+      } else {
+        // If no availability data returned, generate based on room types we know exist
+        roomTypes.forEach(roomType => {
+          realAvailabilityData.push({
+            roomTypeId: roomType.id,
+            date: new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate()),
+            availableRooms: 0 // No rooms available
+          });
+        });
+      }
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+    
+    return realAvailabilityData;
   };
 
   // Fetch hotel data using RoomInfo API only
@@ -131,14 +199,21 @@ export function useHotelData() {
         description: rt.description || ''
       }));
 
-      // Generate mock availability data for the room types we received
-      const mockAvailabilityData = generateMockAvailabilityData(roomTypesArr, fromDate, toDate);
-      
-      console.log('Final RoomTypes:', roomTypesArr);
-      console.log('Final AvailabilityData:', mockAvailabilityData);
+      console.log('Real room types from API:', roomTypesArr.length, 'room types found');
+
+      // Try to get real availability data first, fall back to mock if API fails
+      try {
+        const realAvailabilityData = await fetchRealAvailabilityData(hotelCode, authCode, roomTypesArr, fromDate, toDate);
+        setAvailabilityData(realAvailabilityData);
+        console.log('Using real availability data:', realAvailabilityData.length, 'records');
+      } catch (availabilityError) {
+        console.warn('Real availability API failed, using mock data:', availabilityError);
+        const mockAvailabilityData = generateMockAvailabilityData(roomTypesArr, fromDate, toDate);
+        setAvailabilityData(mockAvailabilityData);
+        console.log('Using mock availability data:', mockAvailabilityData.length, 'records');
+      }
       
       setRoomTypes(roomTypesArr);
-      setAvailabilityData(mockAvailabilityData);
     } catch (err: unknown) {
       console.error('=== FETCH HOTEL DATA ERROR ===', err);
       let errorMsg = 'Unknown error';
@@ -162,8 +237,11 @@ export function useHotelData() {
     setLoading(true);
     setError(null);
     try {
-      const fromDateStr = fromDate.toISOString().split('T')[0];
-      const toDateStr = toDate.toISOString().split('T')[0];
+      // Format dates properly for API (YYYY-MM-DD format)
+      const fromDateStr = `${fromDate.getFullYear()}-${String(fromDate.getMonth() + 1).padStart(2, '0')}-${String(fromDate.getDate()).padStart(2, '0')}`;
+      const toDateStr = `${toDate.getFullYear()}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`;
+      
+      console.log(`[Room Availability API] Fetching data for ${fromDateStr} to ${toDateStr}`);
       
       const response = await fetch(`https://gpnzoprxtdsymatngkbr.supabase.co/functions/v1/get-room-availability`, {
         method: 'POST',

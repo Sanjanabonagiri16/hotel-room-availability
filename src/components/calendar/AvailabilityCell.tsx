@@ -24,6 +24,11 @@ export function AvailabilityCell({
     return "bg-available-unknown border-available-unknown/40 text-muted-foreground";
   };
 
+  // Debug logging (can be removed in production)
+  if (Math.random() < 0.01) { // Log only 1% of cells to avoid spam
+    console.log(`Cell render: ${date.toDateString()} - ${roomType}: ${availableRooms} rooms`);
+  }
+
   return (
     <div
       className={cn(
