@@ -14,14 +14,14 @@ export default function DialogDemo() {
 
   // Room type dialog state
   const [roomTypeDialogOpen, setRoomTypeDialogOpen] = useState(false);
-  const roomType = {
+  const roomTypes = [{
     name: 'Deluxe Double Room with Balcony and Island View',
     id: '9200000000000001',
     active: true,
     ruleType: '',
     ruleValue: '',
     minThreshold: ''
-  };
+  }];
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
@@ -50,7 +50,7 @@ export default function DialogDemo() {
       <EditRoomTypeDialog
         open={roomTypeDialogOpen}
         onOpenChange={setRoomTypeDialogOpen}
-        roomType={roomType}
+        roomTypes={roomTypes}
         onSave={(updated) => { setRoomTypeDialogOpen(false); }}
       />
     </div>

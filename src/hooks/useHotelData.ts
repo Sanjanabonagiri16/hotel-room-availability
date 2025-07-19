@@ -134,33 +134,27 @@ export function useHotelData() {
     setLoading(true);
     setError(null);
     try {
-      // API 1: RoomInfo (room types)
-      const roomInfoPayload = {
-        RES_Request: {
-          Request_Type: 'RoomInfo',
-          NeedPhysicalRooms: 1,
-          Authentication: {
-            HotelCode: hotelCode,
-            AuthCode: authCode
-          }
-        }
-      };
-      const roomInfoRes = await fetch('/api/pms/pms_connectivity.php', {
+      // API 1: RoomInfo (room types) - Use Supabase Edge Function
+      console.log('[PMS API] Fetching room info for hotel:', hotelCode);
+      const roomInfoRes = await fetch('/api/get-room-info', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(roomInfoPayload)
+        body: JSON.stringify({ hotelCode, needPhysicalRooms: 1 })
       });
+      
+      if (!roomInfoRes.ok) {
+        throw new Error(`RoomInfo API call failed with status: ${roomInfoRes.status}`);
+      }
+      
       const roomInfoData = await roomInfoRes.json();
       console.log('[PMS API] RoomInfo Response:', roomInfoData);
-      // Parse room types
-      let roomTypesArr: RoomType[] = [];
-      if (roomInfoData.RoomInfo && roomInfoData.RoomInfo.RoomTypes && Array.isArray(roomInfoData.RoomInfo.RoomTypes.RoomType)) {
-        roomTypesArr = roomInfoData.RoomInfo.RoomTypes.RoomType.map((rt: any) => ({
-          id: rt.ID || rt.Name,
-          name: rt.Name,
-          description: rt.Description || ''
-        }));
-      }
+      
+      // Transform room types from API response
+      const roomTypesArr: RoomType[] = roomInfoData.roomTypes.map((rt: any) => ({
+        id: rt.id,
+        name: rt.name,
+        description: rt.description || ''
+      }));
       // API 2: Inventory (availability, XML via backend proxy)
       const fromDateStr = fromDate.toISOString().split('T')[0];
       const toDateStr = toDate.toISOString().split('T')[0];
@@ -195,15 +189,7 @@ export function useHotelData() {
         setAvailabilityData([]);
         return;
       }
-      // Use the real RoomTypeIDs from the PMS API response
-      const mappedRoomTypes: RoomType[] = [
-        { id: "10200000000000001", name: "Suite", description: "" },
-        { id: "10200000000000002", name: "Superior", description: "" },
-        { id: "10200000000000003", name: "Deluxe", description: "" },
-        { id: "10200000000000004", name: "Standard", description: "" },
-        { id: "10200000000000005", name: "Premium", description: "" },
-        { id: "10200000000000009", name: "Executive", description: "" }
-      ];
+      // Use room types from API instead of hardcoded mapping
       // Make sure your grid's date range is set to 2025-07-17 to 2025-07-31 for testing
       const roomTypeNodes = frontSource.querySelectorAll('RoomType');
       const inventoryArr: AvailabilityData[] = [];
@@ -231,10 +217,10 @@ export function useHotelData() {
           console.warn('[PMS API] Skipped RoomType node due to missing data:', { roomTypeId, fromDate, toDate, availability });
         }
       });
-      console.log('Final RoomTypes:', mappedRoomTypes);
+      console.log('Final RoomTypes:', roomTypesArr);
       console.log('Final AvailabilityData:', inventoryArr);
       setAvailabilityData(inventoryArr);
-      setRoomTypes(mappedRoomTypes);
+      setRoomTypes(roomTypesArr);
     } catch (err: unknown) {
       console.error('=== FETCH HOTEL DATA ERROR ===', err);
       let errorMsg = 'Unknown error';
