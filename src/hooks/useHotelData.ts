@@ -136,9 +136,12 @@ export function useHotelData() {
     try {
       // API 1: RoomInfo (room types) - Use Supabase Edge Function
       console.log('[PMS API] Fetching room info for hotel:', hotelCode);
-      const roomInfoRes = await fetch('/api/get-room-info', {
+      const roomInfoRes = await fetch(`https://gpnzoprxtdsymatngkbr.supabase.co/functions/v1/get-room-info`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwbnpvcHJ4dGRzeW1hdG5na2JyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NjE4OTksImV4cCI6MjA2ODEzNzg5OX0.9LXIy39UcD15CDvuSafjjmllC-Z5LY0ORWh9c0iumJE`
+        },
         body: JSON.stringify({ hotelCode, needPhysicalRooms: 1 })
       });
       
@@ -234,6 +237,52 @@ export function useHotelData() {
     }
   };
 
+  // New function to fetch available rooms for booking
+  const fetchAvailableRooms = async (
+    hotelCode: string,
+    fromDate: Date,
+    toDate: Date,
+    roomTypeId?: string
+  ) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const fromDateStr = fromDate.toISOString().split('T')[0];
+      const toDateStr = toDate.toISOString().split('T')[0];
+      
+      const response = await fetch(`https://gpnzoprxtdsymatngkbr.supabase.co/functions/v1/get-room-availability`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdwbnpvcHJ4dGRzeW1hdG5na2JyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTI1NjE4OTksImV4cCI6MjA2ODEzNzg5OX0.9LXIy39UcD15CDvuSafjjmllC-Z5LY0ORWh9c0iumJE`
+        },
+        body: JSON.stringify({ 
+          hotelCode, 
+          fromDate: fromDateStr, 
+          toDate: toDateStr,
+          roomTypeId
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Room availability API call failed with status: ${response.status}`);
+      }
+
+      const roomData = await response.json();
+      console.log('[Room Availability API] Response:', roomData);
+      return roomData;
+    } catch (err: unknown) {
+      console.error('=== FETCH AVAILABLE ROOMS ERROR ===', err);
+      let errorMsg = 'Unknown error';
+      if (err instanceof Error) errorMsg = err.message;
+      else if (typeof err === 'string') errorMsg = err;
+      setError(`Room availability API error: ${errorMsg}`);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Replace fetchAvailabilityData with fetchHotelData in the hook's return and usage
   return {
     hotels,
@@ -241,6 +290,7 @@ export function useHotelData() {
     availabilityData,
     loading,
     error,
-    fetchAvailabilityData: fetchHotelData
+    fetchAvailabilityData: fetchHotelData,
+    fetchAvailableRooms
   };
 }
